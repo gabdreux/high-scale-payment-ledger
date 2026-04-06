@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: High-Scale Ledger Engine - Core Infrastructure (Synchronous Flow)
+
+# --- CONFIGURAÇÕES GLOBAIS ---
+Globals:
+  Function:
+    Runtime: nodejs18.x
+    Timeout: 10
+    MemorySize: 512
+    Environment:
+      Variables:
+        LEDGER_TABLE: { Ref: LedgerTable }
+
+Resources:
+# =========================================================================
+  # 1. DYNAMODB: (FINOPS & HIGH SCALE)
+  # =========================================================================
+  LedgerTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: HighScaleLedgerCore
+      
+      # --- FINOPS ---
+      BillingMode: PAY_PER_REQUEST 
+      
+      # --- MODELAGEM SINGLE-TABLE ---
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+
+      # --- EVENT-DRIVEN ---
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+      # --- SEGURANÇA BANCÁRIA ---
+      SSESpecification:
+        SSEEnabled: true # Criptografia em repouso
+
+ 
