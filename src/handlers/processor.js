@@ -1,6 +1,7 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { z } from "zod";
+import { isZodError, formatZodError } from "../common/validation.js";
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
@@ -104,17 +105,10 @@ export const handler = async (event) => {
 
         console.error(`[${requestId}] Execution Error:`, error);
 
-        if (error.name === "ZodError" || error.issues) {
-            const details = error.issues || error.errors || [];
+        if (isZodError(error)) {
             return {
                 statusCode: 400,
-                body: JSON.stringify({
-                    message: "Validation Error",
-                    errors: details.map((e) => ({
-                        path: e.path,
-                        message: e.message,
-                    })),
-                }),
+                body: JSON.stringify(formatZodError(error))
             };
         }
         
