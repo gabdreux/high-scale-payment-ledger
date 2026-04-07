@@ -1,5 +1,7 @@
 # High-Scale Serverless Payment Ledger
 
+![Node.js CI](https://github.com/gabdreux/high-scale-payment-ledger/actions/workflows/node.js.yml/badge.svg)
+
 A cloud-native, event-driven ledger engine built with **AWS Serverless** architecture. Designed for high-frequency financial transactions with a focus on **Strong Consistency**, **Idempotency**, and **Zero-Trust Security**.
 
 ---
@@ -54,3 +56,14 @@ Once the transaction is committed, the system triggers a reactive flow to handle
 ├── template.yaml       # AWS SAM Infrastructure as Code (IaC)
 └── package.json        # Dependencies (Minimal & Clean)
 
+## Development & CI/CD
+
+This project uses **GitHub Actions** for Continuous Integration. Every push to the `main` branch or Pull Request triggers:
+* **Linting:** To ensure code quality (AWS SAM/CloudFormation).
+* **Unit Testing:** Using Jest and `aws-sdk-client-mock`.
+* **Environment:** Node.js 24.x (LTS).
+
+To run tests locally:
+```bash
+npm test
+```
