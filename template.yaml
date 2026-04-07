@@ -2,10 +2,10 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: High-Scale Ledger Engine - Core Infrastructure (Synchronous Flow)
 
-# --- CONFIGURAÇÕES GLOBAIS ---
+# --- GLOBAL CONFIGURATIONS ---
 Globals:
   Function:
-    Runtime: nodejs18.x
+    Runtime: nodejs24.x
     Timeout: 10
     MemorySize: 512
     Environment:
@@ -13,18 +13,18 @@ Globals:
         LEDGER_TABLE: { Ref: LedgerTable }
 
 Resources:
-# =========================================================================
-  # 1. DYNAMODB: (FINOPS & HIGH SCALE)
+  # =========================================================================
+  # 1. DYNAMODB: CORE DATA STORE
   # =========================================================================
   LedgerTable:
     Type: AWS::DynamoDB::Table
     Properties:
       TableName: HighScaleLedgerCore
       
-      # --- FINOPS ---
+      # --- FINOPS: On-demand scaling for cost optimization ---
       BillingMode: PAY_PER_REQUEST 
       
-      # --- MODELAGEM SINGLE-TABLE ---
+      # --- SINGLE-TABLE DESIGN MODELING ---
       AttributeDefinitions:
         - AttributeName: PK
           AttributeType: S
@@ -36,12 +36,38 @@ Resources:
         - AttributeName: SK
           KeyType: RANGE
 
-      # --- EVENT-DRIVEN ---
+      # --- EVENT-DRIVEN CAPABILITIES ---
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES
 
-      # --- SEGURANÇA BANCÁRIA ---
+      # --- ENTERPRISE SECURITY: Encryption at rest ---
       SSESpecification:
-        SSEEnabled: true # Criptografia em repouso
+        SSEEnabled: true
 
- 
+  # =========================================================================
+  # 2. LAMBDA PROCESSOR: SYNCHRONOUS FLOW
+  # =========================================================================
+  ProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/handlers/
+      Handler: processor.handler
+      Description: Core engine for ACID transactions and idempotency checks.
+      
+      # --- IAM LEAST PRIVILEGE POLICIES ---
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem        # Required for Idempotency Lock
+                - dynamodb:UpdateItem     # Required for Debit/Credit logic
+                - dynamodb:TransactWriteItems # Required for Atomic Transactions
+              Resource: { "Fn::GetAtt": ["LedgerTable", "Arn"] }
+
+      # --- INGRESS: API GATEWAY ---
+      Events:
+        PostPayment:
+          Type: Api
+          Properties:
+            Path: /payments
+            Method: post

@@ -2,12 +2,13 @@
   "name": "payment-ledger",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "src/handlers/processor.js",
+  "type": "module",
   "directories": {
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },
   "repository": {
     "type": "git",
@@ -19,5 +20,12 @@
   "bugs": {
     "url": "https://github.com/gabdreux/high-scale-payment-ledger/issues"
   },
-  "homepage": "https://github.com/gabdreux/high-scale-payment-ledger#readme"
+  "homepage": "https://github.com/gabdreux/high-scale-payment-ledger#readme",
+  "devDependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1025.0",
+    "@aws-sdk/client-eventbridge": "^3.1025.0",
+    "@aws-sdk/lib-dynamodb": "^3.1025.0",
+    "aws-sdk-client-mock": "^4.1.0",
+    "jest": "^30.3.0"
+  }
 }
