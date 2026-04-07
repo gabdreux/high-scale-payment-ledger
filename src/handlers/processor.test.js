@@ -5,25 +5,39 @@ import { DynamoDBDocumentClient, TransactWriteCommand } from '@aws-sdk/lib-dynam
 process.env.LEDGER_TABLE = 'payment-ledger-table-test';
 const ddbMock = mockClient(DynamoDBDocumentClient);
 
-describe('Processor Handler - Enterprise Suite', () => {
+describe('Processor Handler - (Zod Validated)', () => {
     beforeEach(() => ddbMock.reset());
 
-    it('SUCCESS: should process a valid transfer', async () => {
+    it('SUCCESS: should process a valid transfer with ACC# prefix', async () => {
         ddbMock.on(TransactWriteCommand).resolves({});
         const event = {
-            body: JSON.stringify({ idempotencyKey: 'k1', fromAccount: 'A', toAccount: 'B', amount: 50 })
+            body: JSON.stringify({ idempotencyKey: 'k1', fromAccount: 'ACC#A', toAccount: 'ACC#B', amount: 50 })
         };
         const res = await handler(event);
         expect(res.statusCode).toBe(200);
     });
 
-    it('BUSINESS ERROR: should reject negative amounts', async () => {
+    it('SCHEMA ERROR: should reject account without ACC# prefix', async () => {
         const event = {
-            body: JSON.stringify({ idempotencyKey: 'k2', fromAccount: 'A', toAccount: 'B', amount: -100 })
+            body: JSON.stringify({ 
+                idempotencyKey: 'k1', 
+                fromAccount: 'A',
+                toAccount: 'ACC#B', 
+                amount: 50 
+            })
         };
         const res = await handler(event);
         expect(res.statusCode).toBe(400);
-        expect(JSON.parse(res.body).message).toContain("amount must be positive");
+        expect(JSON.parse(res.body).message).toBe("Validation Error");
+    });
+
+    it('BUSINESS ERROR: should reject negative amounts', async () => {
+        const event = {
+            body: JSON.stringify({ idempotencyKey: 'k2', fromAccount: 'ACC#A', toAccount: 'ACC#B', amount: -100 })
+        };
+        const res = await handler(event);
+        expect(res.statusCode).toBe(400);
+        expect(JSON.parse(res.body).message).toContain("Validation Error");
     });
 
     it('CONFLICT: should identify duplicate idempotency key', async () => {
@@ -32,7 +46,8 @@ describe('Processor Handler - Enterprise Suite', () => {
             CancellationReasons: [{ Code: 'ConditionalCheckFailed' }, {}, {}, {}]
         });
         const event = {
-            body: JSON.stringify({ idempotencyKey: 'k1', fromAccount: 'A', toAccount: 'B', amount: 50 })
+            body: JSON.stringify({ idempotencyKey: 'k1', fromAccount: 'ACC#A', toAccount: 'ACC#B', amount: 50 }),
+            requestContext: { requestId: 'test-conflict' }
         };
         const res = await handler(event);
         expect(res.statusCode).toBe(409);
@@ -45,4 +60,5 @@ describe('Processor Handler - Enterprise Suite', () => {
         expect(res.statusCode).toBe(400);
         expect(JSON.parse(res.body).message).toBe("Invalid JSON format");
     });
+
 });

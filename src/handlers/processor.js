@@ -1,8 +1,18 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
+import { z } from "zod";
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
+
+// DOMAIN SCHEMA DEFINITION
+const PaymentSchema = z.object({
+    idempotencyKey: z.string().min(1),
+    fromAccount: z.string().startsWith("ACC#"),
+    toAccount: z.string().startsWith("ACC#"),
+    amount: z.number().positive()
+});
+
 
 export const handler = async (event) => {
 
@@ -10,21 +20,11 @@ export const handler = async (event) => {
     console.info(`[${requestId}] Starting payment processing`);
 
     try {
-        if (!event.body) throw new Error("MISSING_BODY");
-        
-        const { idempotencyKey, fromAccount, toAccount, amount } = JSON.parse(event.body);
+
+        const rawBody = JSON.parse(event.body || "{}");
+        const { idempotencyKey, fromAccount, toAccount, amount } = PaymentSchema.parse(rawBody);
         const tableName = process.env.LEDGER_TABLE;
 
-        // BUSINESS VALIDATION
-        if (!idempotencyKey || !fromAccount || !toAccount || amount <= 0) {
-            console.warn(`[${requestId}] Validation failed: Invalid input parameters`);
-            return {
-                statusCode: 400,
-                body: JSON.stringify({ 
-                    message: "Invalid input: amount must be positive and all accounts are required" 
-                })
-            };
-        }
 
         const command = new TransactWriteCommand({
             TransactItems: [
@@ -79,7 +79,21 @@ export const handler = async (event) => {
         });
 
         await docClient.send(command);
-        console.info(`[${requestId}] Transaction successful: ${idempotencyKey}`);
+        
+        // EMBEDDED METRIC FORMAT
+        console.info(JSON.stringify({
+            _aws: {
+                Timestamp: Date.now(),
+                CloudWatchMetrics: [{
+                    Namespace: "LedgerEngine",
+                    Dimensions: [["Currency"]],
+                    Metrics: [{ Name: "SuccessfulTransactions", Unit: "Count" }]
+                }]
+            },
+            Currency: "USD",
+            SuccessfulTransactions: 1,
+            requestId
+        }));
 
         return {
             statusCode: 200,
@@ -89,6 +103,21 @@ export const handler = async (event) => {
     } catch (error) {
 
         console.error(`[${requestId}] Execution Error:`, error);
+
+        if (error.name === "ZodError" || error.issues) {
+            const details = error.issues || error.errors || [];
+            return {
+                statusCode: 400,
+                body: JSON.stringify({
+                    message: "Validation Error",
+                    errors: details.map((e) => ({
+                        path: e.path,
+                        message: e.message,
+                    })),
+                }),
+            };
+        }
+        
 
         if (error instanceof SyntaxError) {
             return { statusCode: 400, body: JSON.stringify({ message: "Invalid JSON format" }) };
