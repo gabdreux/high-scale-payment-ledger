@@ -50,8 +50,8 @@ Resources:
   ProcessorFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: src/handlers/
-      Handler: processor.handler
+      CodeUri: .
+      Handler: src/handlers/processor.handler
       Description: Core engine for ACID transactions and idempotency checks.
       
       # --- IAM LEAST PRIVILEGE POLICIES ---
