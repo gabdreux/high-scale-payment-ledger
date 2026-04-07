@@ -2,6 +2,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { z } from "zod";
 import { isZodError, formatZodError } from "../common/validation.js";
+import { logMetric } from "../common/logger.js";
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
@@ -24,6 +25,9 @@ export const handler = async (event) => {
 
         const rawBody = JSON.parse(event.body || "{}");
         const { idempotencyKey, fromAccount, toAccount, amount } = PaymentSchema.parse(rawBody);
+
+        logMetric("ValidationSuccess", 1);
+
         const tableName = process.env.LEDGER_TABLE;
 
 
@@ -81,20 +85,7 @@ export const handler = async (event) => {
 
         await docClient.send(command);
         
-        // EMBEDDED METRIC FORMAT
-        console.info(JSON.stringify({
-            _aws: {
-                Timestamp: Date.now(),
-                CloudWatchMetrics: [{
-                    Namespace: "LedgerEngine",
-                    Dimensions: [["Currency"]],
-                    Metrics: [{ Name: "SuccessfulTransactions", Unit: "Count" }]
-                }]
-            },
-            Currency: "USD",
-            SuccessfulTransactions: 1,
-            requestId
-        }));
+        logMetric("SuccessfulTransactions", 1);
 
         return {
             statusCode: 200,
@@ -106,6 +97,7 @@ export const handler = async (event) => {
         console.error(`[${requestId}] Execution Error:`, error);
 
         if (isZodError(error)) {
+            logMetric("ValidationError", 1);
             return {
                 statusCode: 400,
                 body: JSON.stringify(formatZodError(error))
@@ -114,10 +106,12 @@ export const handler = async (event) => {
         
 
         if (error instanceof SyntaxError) {
+            logMetric("MalformedJSON", 1);
             return { statusCode: 400, body: JSON.stringify({ message: "Invalid JSON format" }) };
         }
 
         if (error.name === "TransactionCanceledException") {
+            logMetric("BusinessLogicError", 1);
             const reasons = error.CancellationReasons;
             const message = reasons?.[0]?.Code === "ConditionalCheckFailed" 
                 ? "Duplicate transaction" 
@@ -126,6 +120,7 @@ export const handler = async (event) => {
             return { statusCode: 409, body: JSON.stringify({ message, code: error.name }) };
         }
 
+        logMetric("SystemError", 1);
         return {
             statusCode: 500,
             body: JSON.stringify({ message: "Internal server error", requestId })
