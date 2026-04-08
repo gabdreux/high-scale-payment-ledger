@@ -25,7 +25,7 @@ export const handler = async (event) => {
     try {
 
         const rawBody = JSON.parse(event.body || "{}");
-        const { idempotencyKey, fromAccount, toAccount, amount } = PaymentSchema.parse(rawBody);
+        const { idempotencyKey, fromAccount, toAccount, amount, type } = PaymentSchema.parse(rawBody);
 
         logMetric("ValidationSuccess", 1);
 
@@ -53,8 +53,13 @@ export const handler = async (event) => {
                         TableName: tableName,
                         Key: { PK: `ACC#${fromAccount}`, SK: "METADATA" },
                         UpdateExpression: "SET balance = if_not_exists(balance, :zero) - :amount",
-                        ConditionExpression: "if_not_exists(balance, :zero) >= :amount",
-                        ExpressionAttributeValues: { ":amount": amount }
+                        ConditionExpression: type === "DEPOSIT" 
+                            ? "attribute_exists(PK) OR attribute_not_exists(PK)" 
+                            : "if_not_exists(balance, :zero) >= :amount",
+                        ExpressionAttributeValues: { 
+                            ":amount": amount, 
+                            ":zero": 0 
+                        }
                     }
                 },
                 // 3. CREDIT: Increase destination account balance
@@ -73,7 +78,7 @@ export const handler = async (event) => {
                         Item: {
                             PK: `ACC#${fromAccount}`,
                             SK: `TX#${Date.now()}#${idempotencyKey}`,
-                            type: "TRANSFER",
+                            type: type,
                             to: toAccount,
                             amount: amount,
                             status: "SUCCESS",
