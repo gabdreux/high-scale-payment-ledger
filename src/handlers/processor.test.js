@@ -32,6 +32,32 @@ describe('Processor Handler - (Zod Validated)', () => {
         expect(logger.logMetric).toHaveBeenCalledWith("SuccessfulTransactions", 1);
     });
 
+    it('SUCCESS: should process a DEPOSIT from system reserve to user', async () => {
+        ddbMock.on(TransactWriteCommand).resolves({});
+        
+        const event = {
+            body: JSON.stringify({ 
+                idempotencyKey: 'dep-001', 
+                fromAccount: 'ACC#SYSTEM_RESERVE',
+                toAccount: 'ACC#GABRIEL', 
+                amount: 1000,
+                type: 'DEPOSIT' 
+            })
+        };
+
+        const res = await handler(event);
+        
+        expect(res.statusCode).toBe(200);
+        const calls = ddbMock.commandCalls(TransactWriteCommand);
+        const params = calls[0].args[0].input.TransactItems;
+
+
+        expect(params[2].Update.UpdateExpression).toContain("SET balance = if_not_exists(balance, :zero) + :amount");
+        expect(params[2].Update.ExpressionAttributeValues[":amount"]).toBe(1000);
+        
+        expect(params[3].Put.Item.type).toBe("DEPOSIT");
+    });
+
     it('BUSINESS LOGIC: should use if_not_exists to handle new accounts', async () => {
         ddbMock.on(TransactWriteCommand).resolves({});
         
