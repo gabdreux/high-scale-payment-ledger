@@ -11,6 +11,7 @@ Globals:
     Environment:
       Variables:
         LEDGER_TABLE: { Ref: LedgerTable }
+        METRICS_NAMESPACE: "PaymentProcessor"
 
 Resources:
   # =========================================================================
@@ -35,6 +36,10 @@ Resources:
           KeyType: HASH
         - AttributeName: SK
           KeyType: RANGE
+
+      TimeToLiveSpecification:
+              AttributeName: ttl
+              Enabled: true
 
       # --- EVENT-DRIVEN CAPABILITIES ---
       StreamSpecification:
@@ -63,6 +68,9 @@ Resources:
                 - dynamodb:UpdateItem     # Required for Debit/Credit logic
                 - dynamodb:TransactWriteItems # Required for Atomic Transactions
               Resource: { "Fn::GetAtt": ["LedgerTable", "Arn"] }
+
+        # SAM Managed Policy to allow pushing metrics to CloudWatch
+        - CloudWatchPutMetricPolicy: {}
 
       # --- INGRESS: API GATEWAY ---
       Events:
