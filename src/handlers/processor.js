@@ -55,7 +55,7 @@ export const handler = async (event) => {
                         UpdateExpression: "SET balance = if_not_exists(balance, :zero) - :amount",
                         ConditionExpression: type === "DEPOSIT" 
                             ? "attribute_exists(PK) OR attribute_not_exists(PK)" 
-                            : "if_not_exists(balance, :zero) >= :amount",
+                            : "balance >= :amount",
                         ExpressionAttributeValues: { 
                             ":amount": amount, 
                             ":zero": 0 
