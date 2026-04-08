@@ -37,6 +37,10 @@ Resources:
         - AttributeName: SK
           KeyType: RANGE
 
+      TimeToLiveSpecification:
+              AttributeName: ttl
+              Enabled: true
+
       # --- EVENT-DRIVEN CAPABILITIES ---
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES
