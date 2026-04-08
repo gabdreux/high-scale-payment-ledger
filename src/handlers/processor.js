@@ -51,7 +51,7 @@ export const handler = async (event) => {
                 {
                     Update: {
                         TableName: tableName,
-                        Key: { PK: `ACC#${fromAccount}`, SK: "METADATA" },
+                        Key: { PK: `${fromAccount}`, SK: "METADATA" },
                         UpdateExpression: "SET balance = if_not_exists(balance, :zero) - :amount",
                         ConditionExpression: type === "DEPOSIT" 
                             ? "attribute_exists(PK) OR attribute_not_exists(PK)" 
@@ -66,7 +66,7 @@ export const handler = async (event) => {
                 {
                     Update: {
                         TableName: tableName,
-                        Key: { PK: `ACC#${toAccount}`, SK: "METADATA" },
+                        Key: { PK: `${toAccount}`, SK: "METADATA" },
                         UpdateExpression: "SET balance = if_not_exists(balance, :zero) + :amount",
                         ExpressionAttributeValues: { ":amount": amount }
                     }
@@ -76,7 +76,7 @@ export const handler = async (event) => {
                     Put: {
                         TableName: tableName,
                         Item: {
-                            PK: `ACC#${fromAccount}`,
+                            PK: `${fromAccount}`,
                             SK: `TX#${Date.now()}#${idempotencyKey}`,
                             type: type,
                             to: toAccount,
