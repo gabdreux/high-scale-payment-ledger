@@ -68,7 +68,10 @@ export const handler = async (event) => {
                         TableName: tableName,
                         Key: { PK: `${toAccount}`, SK: "METADATA" },
                         UpdateExpression: "SET balance = if_not_exists(balance, :zero) + :amount",
-                        ExpressionAttributeValues: { ":amount": amount }
+                        ExpressionAttributeValues: { 
+                            ":amount": amount, 
+                            ":zero": 0 
+                        }
                     }
                 },
                 // 4. LEDGER LOG: Immutable audit trail record
