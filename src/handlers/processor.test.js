@@ -32,6 +32,27 @@ describe('Processor Handler - (Zod Validated)', () => {
         expect(logger.logMetric).toHaveBeenCalledWith("SuccessfulTransactions", 1);
     });
 
+    it('BUSINESS LOGIC: should use if_not_exists to handle new accounts', async () => {
+        ddbMock.on(TransactWriteCommand).resolves({});
+        
+        const event = {
+            body: JSON.stringify({ 
+                idempotencyKey: 'new-acc-test', 
+                fromAccount: 'ACC#NEW_SENDER', 
+                toAccount: 'ACC#NEW_RECEIVER', 
+                amount: 10 
+            })
+        };
+
+        await handler(event);
+
+        const calls = ddbMock.commandCalls(TransactWriteCommand);
+        const params = calls[0].args[0].input.TransactItems;
+
+        expect(params[1].Update.UpdateExpression).toContain("if_not_exists(balance, :zero)");
+        expect(params[2].Update.UpdateExpression).toContain("if_not_exists(balance, :zero)");
+    });
+
     it('SCHEMA ERROR: should reject account without ACC# prefix', async () => {
         const event = {
             body: JSON.stringify({ 

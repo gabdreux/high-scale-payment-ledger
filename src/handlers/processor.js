@@ -12,7 +12,8 @@ const PaymentSchema = z.object({
     idempotencyKey: z.string().min(1),
     fromAccount: z.string().startsWith("ACC#"),
     toAccount: z.string().startsWith("ACC#"),
-    amount: z.number().positive()
+    amount: z.number().positive(),
+    type: z.enum(["TRANSFER", "DEPOSIT"]).default("TRANSFER")
 });
 
 
@@ -51,8 +52,8 @@ export const handler = async (event) => {
                     Update: {
                         TableName: tableName,
                         Key: { PK: `ACC#${fromAccount}`, SK: "METADATA" },
-                        UpdateExpression: "SET balance = balance - :amount",
-                        ConditionExpression: "balance >= :amount",
+                        UpdateExpression: "SET balance = if_not_exists(balance, :zero) - :amount",
+                        ConditionExpression: "if_not_exists(balance, :zero) >= :amount",
                         ExpressionAttributeValues: { ":amount": amount }
                     }
                 },
@@ -61,7 +62,7 @@ export const handler = async (event) => {
                     Update: {
                         TableName: tableName,
                         Key: { PK: `ACC#${toAccount}`, SK: "METADATA" },
-                        UpdateExpression: "SET balance = balance + :amount",
+                        UpdateExpression: "SET balance = if_not_exists(balance, :zero) + :amount",
                         ExpressionAttributeValues: { ":amount": amount }
                     }
                 },
