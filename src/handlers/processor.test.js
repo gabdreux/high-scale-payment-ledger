@@ -51,10 +51,10 @@ describe('Processor Handler - (Zod Validated)', () => {
         const calls = ddbMock.commandCalls(TransactWriteCommand);
         const params = calls[0].args[0].input.TransactItems;
 
-
-        expect(params[2].Update.UpdateExpression).toContain("SET balance = if_not_exists(balance, :zero) + :amount");
+        expect(params[1].Update.ConditionExpression).toContain("attribute_exists(PK)");
+        expect(params[2].Update.UpdateExpression).toContain("if_not_exists(balance, :zero)");
+        expect(params[2].Update.ExpressionAttributeValues[":zero"]).toBe(0);
         expect(params[2].Update.ExpressionAttributeValues[":amount"]).toBe(1000);
-        
         expect(params[3].Put.Item.type).toBe("DEPOSIT");
     });
 
