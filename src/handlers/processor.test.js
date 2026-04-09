@@ -93,6 +93,21 @@ describe('Processor Handler - (Zod Validated)', () => {
         expect(JSON.parse(res.body).message).toBe("Validation Error");
     });
 
+    it('SCHEMA ERROR: should reject non-integer amounts', async () => {
+        const event = {
+            body: JSON.stringify({ 
+                idempotencyKey: 'k1', 
+                fromAccount: 'ACC#A', toAccount: 'ACC#B', 
+                amount: 50.75
+            })
+        };
+        const res = await handler(event);
+        expect(res.statusCode).toBe(400);
+        
+        const body = JSON.parse(res.body);
+        expect(body).toHaveProperty('errors');
+    });
+
     it('BUSINESS ERROR: should reject negative amounts', async () => {
         const event = {
             body: JSON.stringify({ idempotencyKey: 'k2', fromAccount: 'ACC#A', toAccount: 'ACC#B', amount: -100 })
