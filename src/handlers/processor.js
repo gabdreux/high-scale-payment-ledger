@@ -1,14 +1,12 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { PaymentSchema } from "../domain/schemas.js"; 
-import { LedgerService } from "../services/ledger.service.js";
+import { LedgerService, ddbDocClient } from "../services/ledger.service.js";
 import { isZodError, formatZodError } from "../common/validation.js";
 import { logMetric } from "../common/logger.js";
 
 
-const client = new DynamoDBClient({});
-const docClient = DynamoDBDocumentClient.from(client);
-const ledgerService = new LedgerService(docClient, process.env.LEDGER_TABLE);
+const ledgerService = new LedgerService(ddbDocClient, process.env.LEDGER_TABLE);
 
 
 export const handler = async (event) => {

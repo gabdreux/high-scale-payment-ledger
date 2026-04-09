@@ -57,6 +57,7 @@ Resources:
     Properties:
       CodeUri: .
       Handler: src/handlers/processor.handler
+      Tracing: Active
       Description: Core engine for ACID transactions and idempotency checks.
       
       # --- IAM LEAST PRIVILEGE POLICIES ---
@@ -72,6 +73,7 @@ Resources:
 
         # SAM Managed Policy to allow pushing metrics to CloudWatch
         - CloudWatchPutMetricPolicy: {}
+        - AWSXRayDaemonWriteAccess
 
       # --- INGRESS: API GATEWAY ---
       Events:
