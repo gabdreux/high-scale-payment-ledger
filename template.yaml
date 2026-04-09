@@ -66,6 +66,7 @@ Resources:
               Action:
                 - dynamodb:PutItem        # Required for Idempotency Lock
                 - dynamodb:UpdateItem     # Required for Debit/Credit logic
+                - dynamodb:GetItem
                 - dynamodb:TransactWriteItems # Required for Atomic Transactions
               Resource: { "Fn::GetAtt": ["LedgerTable", "Arn"] }
 
@@ -79,3 +80,13 @@ Resources:
           Properties:
             Path: /payments
             Method: post
+
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "node24"
+        External:
+          - "@aws-sdk/*"
+        EntryPoints: 
+          - src/handlers/processor.js
