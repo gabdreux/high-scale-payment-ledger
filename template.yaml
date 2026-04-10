@@ -135,13 +135,21 @@ Resources:
 
   
   # =========================================================================
-  # 5. ASYNC WORKER: SQS + NOTIFICATION LAMBDA
+  # 5. ASYNC WORKER: SQS + DLQ + NOTIFICATION LAMBDA
   # =========================================================================
+  PaymentNotificationDLQ:
+    Type: "AWS::SQS::Queue"
+    Properties:
+      QueueName: "PaymentNotificationDLQ"
+
   PaymentNotificationQueue:
     Type: "AWS::SQS::Queue"
     Properties:
       QueueName: "PaymentNotificationQueue"
       VisibilityTimeout: 30
+      RedrivePolicy:
+        deadLetterTargetArn: { "Fn::GetAtt": ["PaymentNotificationDLQ", "Arn"] }
+        maxReceiveCount: 3
 
   NotificationSubscription:
     Type: "AWS::SNS::Subscription"
