@@ -171,9 +171,28 @@ Resources:
           Properties:
             Queue: { "Fn::GetAtt": ["PaymentNotificationQueue", "Arn"] }
             BatchSize: 5
+            
+  # =========================================================================
+  # 6. OBSERVABILITY: DLQ ALARM
+  # =========================================================================
+    NotificationDLQAlarm:
+      Type: "AWS::CloudWatch::Alarm"
+      Properties:
+        AlarmDescription: "Grita se houver mensagens falhas na DLQ de Notificação"
+        Namespace: "AWS/SQS"
+        MetricName: "ApproximateNumberOfMessagesVisible"
+        Dimensions:
+          - Name: "QueueName"
+            Value: !GetAtt PaymentNotificationDLQ.QueueName
+        Statistic: "Sum"
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: "GreaterThanOrEqualToThreshold"
+        TreatMissingData: "notBreaching"           
 
 # =========================================================================
-# 6. STACK OUTPUTS: EXPOSING RESOURCES FOR EXTERNAL INTEGRATION
+# 7. STACK OUTPUTS: EXPOSING RESOURCES FOR EXTERNAL INTEGRATION
 # =========================================================================
 Outputs:
   LedgerTableStreamArn:
