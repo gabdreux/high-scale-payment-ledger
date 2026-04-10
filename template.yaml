@@ -38,8 +38,8 @@ Resources:
           KeyType: RANGE
 
       TimeToLiveSpecification:
-              AttributeName: ttl
-              Enabled: true
+        AttributeName: ttl
+        Enabled: true
 
       # --- EVENT-DRIVEN CAPABILITIES ---
       StreamSpecification:
@@ -92,3 +92,103 @@ Resources:
           - "@aws-sdk/*"
         EntryPoints: 
           - src/handlers/processor.js
+
+
+  # =========================================================================
+  # 3. STREAM POLLER: ASYNC EVENT DISPATCHER
+  # =========================================================================
+  StreamPollerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src/handlers/stream-poller.handler
+      Tracing: Active
+      Policies:
+        - SNSPublishMessagePolicy:
+            TopicName: "HighScaleTransactionEvents" 
+        - AWSXRayDaemonWriteAccess
+        - CloudWatchPutMetricPolicy: {}
+
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN: { Ref: TransactionEventsTopic }
+
+      Events:
+        LedgerStream:
+          Type: DynamoDB
+          Properties:
+            Stream: { "Fn::GetAtt": ["LedgerTable", "StreamArn"] }
+            StartingPosition: TRIM_HORIZON
+            BatchSize: 10
+            FilterCriteria:
+              Filters:
+                - Pattern: '{"dynamodb":{"Keys":{"SK":{"S":[{"prefix":"TX#"}]}},"NewImage":{"status":{"S":["SUCCESS"]}}}}'
+
+  # =========================================================================
+  # 4. SNS TOPIC: CENTRAL EVENT BUS
+  # =========================================================================
+  TransactionEventsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: "HighScaleTransactionEvents"
+      KmsMasterKeyId: "alias/aws/sns"
+
+  
+  # =========================================================================
+  # 5. ASYNC WORKER: SQS + NOTIFICATION LAMBDA
+  # =========================================================================
+  PaymentNotificationQueue:
+    Type: "AWS::SQS::Queue"
+    Properties:
+      QueueName: "PaymentNotificationQueue"
+      VisibilityTimeout: 30
+
+  NotificationSubscription:
+    Type: "AWS::SNS::Subscription"
+    Properties:
+      TopicArn: { "Ref": "TransactionEventsTopic" }
+      Endpoint: { "Fn::GetAtt": ["PaymentNotificationQueue", "Arn"] }
+      Protocol: "sqs"
+      RawMessageDelivery: true
+
+  NotificationFunction:
+    Type: "AWS::Serverless::Function"
+    Properties:
+      CodeUri: .
+      Handler: src/handlers/notification-worker.handler
+      Runtime: nodejs24.x
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: { "Fn::GetAtt": ["PaymentNotificationQueue", "Arn"] }
+            BatchSize: 5
+
+# =========================================================================
+# 6. STACK OUTPUTS: EXPOSING RESOURCES FOR EXTERNAL INTEGRATION
+# =========================================================================
+Outputs:
+  LedgerTableStreamArn:
+    Description: "The ARN of the DynamoDB Stream for downstream processing."
+    Value: { "Fn::GetAtt": ["LedgerTable", "StreamArn"] }
+    Export:
+      Name: 
+        "Fn::Join": [ "-", [ { "Ref": "AWS::StackName" }, "StreamArn" ] ]
+
+  TransactionEventsTopicArn:
+    Description: "The ARN of the SNS Topic for event-driven fan-out."
+    Value: { Ref: TransactionEventsTopic }
+    Export:
+      Name: 
+        "Fn::Join": [ "-", [ { "Ref": "AWS::StackName" }, "TopicArn" ] ]
+
+  ProcessorApiUrl:
+    Description: "The base URL for the synchronous Ledger API."
+    Value: 
+      "Fn::Join": 
+        - ""
+        - - "https://"
+          - { "Ref": "ServerlessRestApi" }
+          - ".execute-api."
+          - { "Ref": "AWS::Region" }
+          - ".amazonaws.com/Prod/payments"
