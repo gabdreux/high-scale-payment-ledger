@@ -223,10 +223,68 @@ Resources:
       EvaluationPeriods: 1
       Threshold: 1
       ComparisonOperator: "GreaterThanOrEqualToThreshold"
-      TreatMissingData: "notBreaching"           
+      TreatMissingData: "notBreaching"
+
+
+  # =========================================================================
+  # 7. OBSERVABILITY: OPERATIONAL DASHBOARD
+  # =========================================================================
+  LedgerOperationalDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${AWS::StackName}-Operational-Dashboard"
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0, "y": 0, "width": 12, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${StreamPollerFunction}", { "label": "Poller Invocations" } ],
+                  [ ".", "Errors", ".", ".", { "label": "Poller Errors", "color": "#d62728" } ],
+                  [ ".", "Invocations", "FunctionName", "${NotificationFunction}", { "label": "Worker Invocations" } ],
+                  [ ".", "Errors", ".", ".", { "label": "Worker Errors", "color": "#ff7f0e" } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Lambda Activity: Poller vs Worker"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12, "y": 0, "width": 12, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${PaymentNotificationQueue.QueueName}", { "label": "Main Queue Depth" } ],
+                  [ ".", "ApproximateNumberOfMessagesVisible", "QueueName", "${PaymentNotificationDLQ.QueueName}", { "label": "DLQ Depth", "color": "#d62728" } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "SQS Queue Depth (Backlog & DLQ)"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0, "y": 6, "width": 24, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${NotificationFunction}", { "stat": "Average", "label": "Avg Duration" } ],
+                  [ "...", { "stat": "p99", "label": "p99 Duration" } ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Notification Worker Latency (ms)"
+              }
+            }
+          ]
+        }
 
 # =========================================================================
-# 7. STACK OUTPUTS: EXPOSING RESOURCES FOR EXTERNAL INTEGRATION
+# 8. STACK OUTPUTS: EXPOSING RESOURCES FOR EXTERNAL INTEGRATION
 # =========================================================================
 Outputs:
   LedgerTableStreamArn:
