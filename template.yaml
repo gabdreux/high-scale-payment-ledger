@@ -62,18 +62,9 @@ Resources:
       
       # --- IAM LEAST PRIVILEGE POLICIES ---
       Policies:
-        - Statement:
-            - Effect: Allow
-              Action:
-                - dynamodb:PutItem        # Required for Idempotency Lock
-                - dynamodb:UpdateItem     # Required for Debit/Credit logic
-                - dynamodb:GetItem
-                - dynamodb:TransactWriteItems # Required for Atomic Transactions
-              Resource: { "Fn::GetAtt": ["LedgerTable", "Arn"] }
-
-        # SAM Managed Policy to allow pushing metrics to CloudWatch
+        - DynamoDBCrudPolicy: { TableName: !Ref LedgerTable }
+        - AWSXrayWriteOnlyAccess
         - CloudWatchPutMetricPolicy: {}
-        - AWSXRayDaemonWriteAccess
 
       # --- INGRESS: API GATEWAY ---
       Events:
@@ -106,7 +97,7 @@ Resources:
       Policies:
         - SNSPublishMessagePolicy:
             TopicName: "HighScaleTransactionEvents" 
-        - AWSXRayDaemonWriteAccess
+        - AWSXrayWriteOnlyAccess
         - CloudWatchPutMetricPolicy: {}
 
       Environment:
@@ -120,10 +111,21 @@ Resources:
             Stream: { "Fn::GetAtt": ["LedgerTable", "StreamArn"] }
             StartingPosition: TRIM_HORIZON
             BatchSize: 10
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
             FilterCriteria:
               Filters:
                 - Pattern: '{"dynamodb":{"Keys":{"SK":{"S":[{"prefix":"TX#"}]}},"NewImage":{"status":{"S":["SUCCESS"]}}}}'
 
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "node24"
+        External:
+          - "@aws-sdk/*"
+        EntryPoints: 
+          - src/handlers/stream-poller.js
   # =========================================================================
   # 4. SNS TOPIC: CENTRAL EVENT BUS
   # =========================================================================
@@ -151,6 +153,22 @@ Resources:
         deadLetterTargetArn: { "Fn::GetAtt": ["PaymentNotificationDLQ", "Arn"] }
         maxReceiveCount: 3
 
+  PaymentQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - { Ref: PaymentNotificationQueue }
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: "sns.amazonaws.com"
+            Action: "sqs:SendMessage"
+            Resource: { "Fn::GetAtt": ["PaymentNotificationQueue", "Arn"] }
+            Condition:
+              ArnEquals:
+                "aws:SourceArn": { Ref: TransactionEventsTopic }
+
   NotificationSubscription:
     Type: "AWS::SNS::Subscription"
     Properties:
@@ -164,32 +182,48 @@ Resources:
     Properties:
       CodeUri: .
       Handler: src/handlers/notification-worker.handler
-      Runtime: nodejs24.x
+      Tracing: Active
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref LedgerTable }
+        - AWSXrayWriteOnlyAccess
+        - CloudWatchPutMetricPolicy: {}
       Events:
         SQSEvent:
           Type: SQS
           Properties:
             Queue: { "Fn::GetAtt": ["PaymentNotificationQueue", "Arn"] }
             BatchSize: 5
-            
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+    
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "node24"
+        External:
+          - "@aws-sdk/*"
+        EntryPoints: 
+          - src/handlers/notification-worker.js
+
   # =========================================================================
   # 6. OBSERVABILITY: DLQ ALARM
   # =========================================================================
-    NotificationDLQAlarm:
-      Type: "AWS::CloudWatch::Alarm"
-      Properties:
-        AlarmDescription: "Grita se houver mensagens falhas na DLQ de Notificação"
-        Namespace: "AWS/SQS"
-        MetricName: "ApproximateNumberOfMessagesVisible"
-        Dimensions:
-          - Name: "QueueName"
-            Value: !GetAtt PaymentNotificationDLQ.QueueName
-        Statistic: "Sum"
-        Period: 60
-        EvaluationPeriods: 1
-        Threshold: 1
-        ComparisonOperator: "GreaterThanOrEqualToThreshold"
-        TreatMissingData: "notBreaching"           
+  NotificationDLQAlarm:
+    Type: "AWS::CloudWatch::Alarm"
+    Properties:
+      AlarmDescription: "Shout if there are failed messages in the Notification DLQ."
+      Namespace: "AWS/SQS"
+      MetricName: "ApproximateNumberOfMessagesVisible"
+      Dimensions:
+        - Name: "QueueName"
+          Value: { "Fn::GetAtt": ["PaymentNotificationDLQ", "QueueName"] }
+      Statistic: "Sum"
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: "GreaterThanOrEqualToThreshold"
+      TreatMissingData: "notBreaching"           
 
 # =========================================================================
 # 7. STACK OUTPUTS: EXPOSING RESOURCES FOR EXTERNAL INTEGRATION

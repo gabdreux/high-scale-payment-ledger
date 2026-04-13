@@ -1,7 +1,6 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { PaymentSchema } from "../domain/schemas.js"; 
-import { LedgerService, ddbDocClient } from "../services/ledger.service.js";
+import { PaymentSchema } from "../domain/schemas.js";
+import { LedgerService } from "../services/ledger.service.js";
+import { ddbDocClient } from "../lib/clients.js";
 import { isZodError, formatZodError } from "../common/validation.js";
 import { logMetric } from "../common/logger.js";
 
@@ -9,8 +8,8 @@ import { logMetric } from "../common/logger.js";
 const ledgerService = new LedgerService(ddbDocClient, process.env.LEDGER_TABLE);
 
 
-export const handler = async (event) => {
-    const requestId = event.requestContext?.requestId || 'internal';
+export const handler = async (event, context) => {
+    const requestId = event.requestContext?.requestId || context?.awsRequestId || 'internal';
 
     try {
         const rawBody = typeof event.body === "string" ? JSON.parse(event.body) : event.body;

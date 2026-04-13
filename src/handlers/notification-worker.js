@@ -1,34 +1,52 @@
+import { PutCommand } from "@aws-sdk/lib-dynamodb";
+import { ddbDocClient } from "../lib/clients.js";
 import { logMetric } from "../common/logger.js";
 
-
 export const handler = async (event) => {
+    console.log(`[NotificationWorker] Received ${event.Records.length} messages from SQS`);
 
-    const records = event.Records;
-    console.log(`[NotificationWorker] Received ${records.length} messages from SQS`);
+    const batchItemFailures = [];
 
-    for (const record of records) {
+    for (const record of event.Records) {
         try {
-
-            const message = JSON.parse(record.body);
+            const body = JSON.parse(record.body);
+            const data = body.Message ? JSON.parse(body.Message) : body;
+            const txId = data.transactionId || data.SK || "UNKNOWN";
             
-            console.log(`[NotificationWorker] Processing transaction: ${message.transactionId}`);
-            
-            // Simulate sending a notification
-            // In a real scenario, call an external API or AWS SES here
-            await simulateNotification(message);
+            console.log(`[NotificationWorker] Processing transaction: ${txId}`);
 
+            try {
+
+                await ddbDocClient.send(new PutCommand({
+                    TableName: process.env.LEDGER_TABLE,
+                    Item: {
+                        PK: `NOTIF#${txId}`,
+                        SK: "SENT",
+                        sentAt: new Date().toISOString(),
+                        ttl: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60)
+                    },
+                    ConditionExpression: "attribute_not_exists(PK)"
+                }));
+            } catch (err) {
+                if (err.name === "ConditionalCheckFailedException") {
+                    console.log(`[NotificationWorker] Skip: Already sent for ${txId}`);
+                    continue;
+                }
+                throw err;
+            }
+            
+            await simulateNotification(data);
             logMetric("NotificationSent", 1);
-            
-        } catch (error) {
 
-            console.error("[NotificationWorker] Failed to process record:", error);
+        } catch (error) {
+            console.error("[NotificationWorker] FAILED to process message:", error);
             logMetric("NotificationError", 1);
-            
-            throw error; 
+            batchItemFailures.push({ itemIdentifier: record.messageId });
         }
+
     }
 
-    return { batchItemFailures: [] };
+    return { batchItemFailures };
 };
 
 async function simulateNotification(data) {

@@ -6,9 +6,10 @@ import { mockClient } from "aws-sdk-client-mock";
 const snsMock = mockClient(SNSClient);
 
 describe("Stream Poller Handler", () => {
+    
     beforeEach(() => {
         snsMock.reset();
-        process.env.TOPIC_ARN = "arn:aws:sns:us-east-1:123456789012:MyTopic";
+        process.env.SNS_TOPIC_ARN = "arn:aws:sns:us-east-1:123456789012:MyTopic";
     });
 
     it("should parse DynamoDB records and publish to SNS", async () => {
@@ -34,7 +35,7 @@ describe("Stream Poller Handler", () => {
 
         const result = await handler(event);
 
-        expect(result.status).toBe("done");
+        expect(result.batchItemFailures).toHaveLength(0);
         expect(snsMock.calls()).toHaveLength(1);
         
         const sentMessage = JSON.parse(snsMock.call(0).args[0].input.Message);
