@@ -1,13 +1,4 @@
 import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import AWSXRay from "aws-xray-sdk-core";
-
-
-const ddbClient = new DynamoDBClient({});
-const tracedClient = AWSXRay.captureAWSv3Client(ddbClient);
-
-export const ddbDocClient = DynamoDBDocumentClient.from(tracedClient);
 
 export class LedgerService {
     constructor(docClient, tableName) {

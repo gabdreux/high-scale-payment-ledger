@@ -38,8 +38,8 @@ Resources:
           KeyType: RANGE
 
       TimeToLiveSpecification:
-              AttributeName: ttl
-              Enabled: true
+        AttributeName: ttl
+        Enabled: true
 
       # --- EVENT-DRIVEN CAPABILITIES ---
       StreamSpecification:
@@ -62,18 +62,9 @@ Resources:
       
       # --- IAM LEAST PRIVILEGE POLICIES ---
       Policies:
-        - Statement:
-            - Effect: Allow
-              Action:
-                - dynamodb:PutItem        # Required for Idempotency Lock
-                - dynamodb:UpdateItem     # Required for Debit/Credit logic
-                - dynamodb:GetItem
-                - dynamodb:TransactWriteItems # Required for Atomic Transactions
-              Resource: { "Fn::GetAtt": ["LedgerTable", "Arn"] }
-
-        # SAM Managed Policy to allow pushing metrics to CloudWatch
+        - DynamoDBCrudPolicy: { TableName: !Ref LedgerTable }
+        - AWSXrayWriteOnlyAccess
         - CloudWatchPutMetricPolicy: {}
-        - AWSXRayDaemonWriteAccess
 
       # --- INGRESS: API GATEWAY ---
       Events:
@@ -92,3 +83,173 @@ Resources:
           - "@aws-sdk/*"
         EntryPoints: 
           - src/handlers/processor.js
+
+
+  # =========================================================================
+  # 3. STREAM POLLER: ASYNC EVENT DISPATCHER
+  # =========================================================================
+  StreamPollerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src/handlers/stream-poller.handler
+      Tracing: Active
+      Policies:
+        - SNSPublishMessagePolicy:
+            TopicName: "HighScaleTransactionEvents" 
+        - AWSXrayWriteOnlyAccess
+        - CloudWatchPutMetricPolicy: {}
+
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN: { Ref: TransactionEventsTopic }
+
+      Events:
+        LedgerStream:
+          Type: DynamoDB
+          Properties:
+            Stream: { "Fn::GetAtt": ["LedgerTable", "StreamArn"] }
+            StartingPosition: TRIM_HORIZON
+            BatchSize: 10
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+            FilterCriteria:
+              Filters:
+                - Pattern: '{"dynamodb":{"Keys":{"SK":{"S":[{"prefix":"TX#"}]}},"NewImage":{"status":{"S":["SUCCESS"]}}}}'
+
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "node24"
+        External:
+          - "@aws-sdk/*"
+        EntryPoints: 
+          - src/handlers/stream-poller.js
+  # =========================================================================
+  # 4. SNS TOPIC: CENTRAL EVENT BUS
+  # =========================================================================
+  TransactionEventsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: "HighScaleTransactionEvents"
+      KmsMasterKeyId: "alias/aws/sns"
+
+  
+  # =========================================================================
+  # 5. ASYNC WORKER: SQS + DLQ + NOTIFICATION LAMBDA
+  # =========================================================================
+  PaymentNotificationDLQ:
+    Type: "AWS::SQS::Queue"
+    Properties:
+      QueueName: "PaymentNotificationDLQ"
+
+  PaymentNotificationQueue:
+    Type: "AWS::SQS::Queue"
+    Properties:
+      QueueName: "PaymentNotificationQueue"
+      VisibilityTimeout: 30
+      RedrivePolicy:
+        deadLetterTargetArn: { "Fn::GetAtt": ["PaymentNotificationDLQ", "Arn"] }
+        maxReceiveCount: 3
+
+  PaymentQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - { Ref: PaymentNotificationQueue }
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: "sns.amazonaws.com"
+            Action: "sqs:SendMessage"
+            Resource: { "Fn::GetAtt": ["PaymentNotificationQueue", "Arn"] }
+            Condition:
+              ArnEquals:
+                "aws:SourceArn": { Ref: TransactionEventsTopic }
+
+  NotificationSubscription:
+    Type: "AWS::SNS::Subscription"
+    Properties:
+      TopicArn: { "Ref": "TransactionEventsTopic" }
+      Endpoint: { "Fn::GetAtt": ["PaymentNotificationQueue", "Arn"] }
+      Protocol: "sqs"
+      RawMessageDelivery: true
+
+  NotificationFunction:
+    Type: "AWS::Serverless::Function"
+    Properties:
+      CodeUri: .
+      Handler: src/handlers/notification-worker.handler
+      Tracing: Active
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref LedgerTable }
+        - AWSXrayWriteOnlyAccess
+        - CloudWatchPutMetricPolicy: {}
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: { "Fn::GetAtt": ["PaymentNotificationQueue", "Arn"] }
+            BatchSize: 5
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+    
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "node24"
+        External:
+          - "@aws-sdk/*"
+        EntryPoints: 
+          - src/handlers/notification-worker.js
+
+  # =========================================================================
+  # 6. OBSERVABILITY: DLQ ALARM
+  # =========================================================================
+  NotificationDLQAlarm:
+    Type: "AWS::CloudWatch::Alarm"
+    Properties:
+      AlarmDescription: "Shout if there are failed messages in the Notification DLQ."
+      Namespace: "AWS/SQS"
+      MetricName: "ApproximateNumberOfMessagesVisible"
+      Dimensions:
+        - Name: "QueueName"
+          Value: { "Fn::GetAtt": ["PaymentNotificationDLQ", "QueueName"] }
+      Statistic: "Sum"
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: "GreaterThanOrEqualToThreshold"
+      TreatMissingData: "notBreaching"           
+
+# =========================================================================
+# 7. STACK OUTPUTS: EXPOSING RESOURCES FOR EXTERNAL INTEGRATION
+# =========================================================================
+Outputs:
+  LedgerTableStreamArn:
+    Description: "The ARN of the DynamoDB Stream for downstream processing."
+    Value: { "Fn::GetAtt": ["LedgerTable", "StreamArn"] }
+    Export:
+      Name: 
+        "Fn::Join": [ "-", [ { "Ref": "AWS::StackName" }, "StreamArn" ] ]
+
+  TransactionEventsTopicArn:
+    Description: "The ARN of the SNS Topic for event-driven fan-out."
+    Value: { Ref: TransactionEventsTopic }
+    Export:
+      Name: 
+        "Fn::Join": [ "-", [ { "Ref": "AWS::StackName" }, "TopicArn" ] ]
+
+  ProcessorApiUrl:
+    Description: "The base URL for the synchronous Ledger API."
+    Value: 
+      "Fn::Join": 
+        - ""
+        - - "https://"
+          - { "Ref": "ServerlessRestApi" }
+          - ".execute-api."
+          - { "Ref": "AWS::Region" }
+          - ".amazonaws.com/Prod/payments"
