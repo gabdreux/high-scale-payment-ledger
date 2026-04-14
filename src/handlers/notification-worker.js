@@ -1,6 +1,7 @@
 import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ddbDocClient } from "../lib/clients.js";
 import { logMetric } from "../common/logger.js";
+import { PaymentSchema } from "../domain/schemas.js";
 
 export const handler = async (event) => {
     console.log(`[NotificationWorker] Received ${event.Records.length} messages from SQS`);
@@ -10,10 +11,17 @@ export const handler = async (event) => {
     for (const record of event.Records) {
         try {
             const body = JSON.parse(record.body);
-            const data = body.Message ? JSON.parse(body.Message) : body;
-            const txId = data.transactionId || data.SK || "UNKNOWN";
-            
-            console.log(`[NotificationWorker] Processing transaction: ${txId}`);
+            const rawData = body.Message ? JSON.parse(body.Message) : body;
+
+            const result = PaymentSchema.safeParse(rawData);
+
+            if (!result.success) {
+                console.error(`[Poison Pill] ID: ${record.messageId} - Invalid format. Skipping.`);
+                continue;
+            }
+
+            const data = result.data;
+            const txId = data.transactionId || data.SK;
 
             try {
 
