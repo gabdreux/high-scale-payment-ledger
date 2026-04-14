@@ -283,8 +283,25 @@ Resources:
           ]
         }
 
+  # =========================================================================
+  # 8. REDRIVE
+  # =========================================================================
+
+  RedriveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/redrive-handler.handler
+      Description: "Manual or automated redrive from DLQ to Main Queue"
+      Environment:
+        Variables:
+          DLQ_URL: !Ref PaymentNotificationDLQ
+          MAIN_QUEUE_URL: !Ref PaymentNotificationQueue
+      Policies:
+        - SQSPollerPolicy: { QueueName: "PaymentNotificationDLQ" }
+        - SQSSendMessagePolicy: { QueueName: "PaymentNotificationQueue" }
+
 # =========================================================================
-# 8. STACK OUTPUTS: EXPOSING RESOURCES FOR EXTERNAL INTEGRATION
+# 9. STACK OUTPUTS: EXPOSING RESOURCES FOR EXTERNAL INTEGRATION
 # =========================================================================
 Outputs:
   LedgerTableStreamArn:
