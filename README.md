@@ -32,6 +32,10 @@ Once the transaction is committed, the system triggers a reactive flow to handle
 * **Amazon EventBridge:** Acts as the central nervous system, routing events to downstream consumers (Notifications, Data Lake, Audit) via smart rules.
 
 
+### 3. Resilience & Error Handling
+* **Poison Pill Filtering:** Using **Zod**, the system automatically identifies and discards malformed payloads (Poison Pills), preventing infinite retry loops and cleaning the processing pipeline.
+* **Manual Redrive:** Integrated DLQ (Dead Letter Queue) management with a custom Redrive mechanism to recover from transient infrastructure failures.
+
 
 ---
 
@@ -48,13 +52,19 @@ Once the transaction is committed, the system triggers a reactive flow to handle
 ## Project Structure
 
 
+```
+.
 ├── src/
-    ├── handlers/       # Lambda entry points (Processor, Poller, Notifier)
-    ├── lib/            # Shared business logic & DB helpers
-    └── events/         # Mock payloads for cloud testing
-├── docs/               # Architectural diagrams
-├── template.yaml       # AWS SAM Infrastructure as Code (IaC)
-└── package.json        # Dependencies (Minimal & Clean)
+│   ├── common/        # Shared utilities (Logger, Validation logic)
+│   ├── domain/        # Business rules & Data schemas (Zod)
+│   ├── handlers/      # Lambda Entry Points (Processor, Workers, Pollers)
+│   ├── lib/           # Infrastructure clients (AWS SDK Config)
+│   └── services/      # Core Business Logic (Ledger orchestration)
+├── docs/              # Architectural diagrams & Technical documentation
+├── template.yaml      # AWS SAM Infrastructure as Code (IaC)
+└── package.json       # Dependencies & Scripts
+```
+
 
 ## Development & CI/CD
 
@@ -66,4 +76,14 @@ This project uses **GitHub Actions** for Continuous Integration. Every push to t
 To run tests locally:
 ```bash
 npm test
+```
+
+
+## Building & Compilation
+
+The project leverages **esbuild** (integrated with **AWS SAM**) to compile TypeScript. This ensures lightning-fast build times and highly optimized bundles for AWS Lambda, keeping the deployment package minimal.
+
+To compile and prepare the infrastructure:
+```bash
+sam build
 ```
