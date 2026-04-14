@@ -38,7 +38,15 @@ describe("Notification Worker - Validation", () => {
     it("should process new transaction and record idempotency lock", async () => {
         const event = {
             Records: [{
-                body: JSON.stringify({ transactionId: "TX#CONFIRMED", amount: 100 }),
+                body: JSON.stringify({ 
+                    idempotencyKey: "idem-001",
+                    transactionId: "TX#CONFIRMED",
+                    fromAccount: "ACC#123",
+                    toAccount: "ACC#456", 
+                    amount: 100,
+                    type: "TRANSFER",
+                    transactionId: "TX#CONFIRMED"
+                }),
                 messageId: "msg-001"
             }]
         };
@@ -57,7 +65,13 @@ describe("Notification Worker - Validation", () => {
     it("should SKIP processing if idempotency lock already exists (Duplicate)", async () => {
         const event = {
             Records: [{
-                body: JSON.stringify({ transactionId: "TX#DUPLICATE" }),
+                body: JSON.stringify({ 
+                    idempotencyKey: "idem-002",
+                    fromAccount: "ACC#123",
+                    toAccount: "ACC#456",
+                    amount: 100,
+                    transactionId: "TX#DUPLICATE"
+                 }),
                 messageId: "msg-002"
             }]
         };
@@ -75,7 +89,13 @@ describe("Notification Worker - Validation", () => {
     it("should record message failure if DynamoDB fails for infrastructure reasons", async () => {
         const event = {
             Records: [{ 
-                body: JSON.stringify({ transactionId: "TX#DB_FAIL" }),
+                body: JSON.stringify({ 
+                    idempotencyKey: "idem-003",
+                    fromAccount: "ACC#123",
+                    toAccount: "ACC#456",
+                    amount: 100,
+                    transactionId: "TX#DB_FAIL"
+                 }),
                 messageId: "msg-fail-123" 
             }]
         };
