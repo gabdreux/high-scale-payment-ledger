@@ -33,7 +33,7 @@ Once the transaction is committed, the system triggers a reactive flow to handle
 
 
 ### 3. Resilience & Error Handling
-* **Poison Pill Filtering:** Using **Zod**, the system automatically identifies and discards malformed payloads (Poison Pills), preventing infinite retry loops and cleaning the processing pipeline.
+* **Poison Pill Isolation:** Using **Zod**, the system identifies malformed payloads and routes them to a Dead Letter Queue (DLQ). This prevents infinite retry loops while ensuring that no data is silently discarded, allowing for manual inspection and redrive.
 * **Manual Redrive:** Integrated DLQ (Dead Letter Queue) management with a custom Redrive mechanism to recover from transient infrastructure failures.
 
 

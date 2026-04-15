@@ -1,3 +1,4 @@
+import { APIGatewayProxyHandler, APIGatewayProxyResult } from "aws-lambda";
 import { PaymentSchema } from "../domain/schemas.js";
 import { LedgerService } from "../services/ledger.service.js";
 import { ddbDocClient } from "../lib/clients.js";
@@ -5,10 +6,10 @@ import { isZodError, formatZodError } from "../common/validation.js";
 import { logMetric } from "../common/logger.js";
 
 
-const ledgerService = new LedgerService(ddbDocClient, process.env.LEDGER_TABLE);
+const ledgerService = new LedgerService(ddbDocClient, process.env.LEDGER_TABLE!);
 
 
-export const handler = async (event, context) => {
+export const handler: APIGatewayProxyHandler = async (event, context): Promise<APIGatewayProxyResult> => {
     const requestId = event.requestContext?.requestId || context?.awsRequestId || 'internal';
 
     try {
@@ -32,7 +33,7 @@ export const handler = async (event, context) => {
 
 
 
-function handleError(error, requestId) {
+function handleError(error: any, requestId: string): APIGatewayProxyResult {
   console.error(`[${requestId}] Execution Error:`, error);
 
   if (isZodError(error)) {

@@ -1,12 +1,17 @@
-import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
+import { PaymentData } from "../domain/schemas.js";
+
 
 export class LedgerService {
-    constructor(docClient, tableName) {
+    private docClient: DynamoDBDocumentClient;
+    private tableName: string;
+
+    constructor(docClient: DynamoDBDocumentClient, tableName: string) {
         this.docClient = docClient;
-        this.tableName = tableName;
+        this.tableName = tableName || '';
     }
 
-    async processTransaction(paymentData) {
+    async processTransaction(paymentData: PaymentData): Promise<any> {
         const { idempotencyKey, fromAccount, toAccount, amount, type } = paymentData;
         const now = new Date().toISOString();
 
