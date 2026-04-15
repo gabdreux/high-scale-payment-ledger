@@ -13,4 +13,4 @@ const snsTraced = AWSXRay.captureAWSv3Client(snsBaseClient);
 
 
 export const ddbDocClient = DynamoDBDocumentClient.from(ddbTraced);
-export const snsClient = snsTraced;
+export const snsClient = snsTraced as SNSClient;

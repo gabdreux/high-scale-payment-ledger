@@ -24,6 +24,9 @@ Resources:
       
       # --- FINOPS: On-demand scaling for cost optimization ---
       BillingMode: PAY_PER_REQUEST 
+
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
       
       # --- SINGLE-TABLE DESIGN MODELING ---
       AttributeDefinitions:
@@ -45,7 +48,7 @@ Resources:
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES
 
-      # --- ENTERPRISE SECURITY: Encryption at rest ---
+      # --- SECURITY: Encryption at rest ---
       SSESpecification:
         SSEEnabled: true
 
@@ -82,7 +85,7 @@ Resources:
         External:
           - "@aws-sdk/*"
         EntryPoints: 
-          - src/handlers/processor.js
+          - src/handlers/processor.ts
 
 
   # =========================================================================
@@ -125,7 +128,9 @@ Resources:
         External:
           - "@aws-sdk/*"
         EntryPoints: 
-          - src/handlers/stream-poller.js
+          - src/handlers/stream-poller.ts
+
+
   # =========================================================================
   # 4. SNS TOPIC: CENTRAL EVENT BUS
   # =========================================================================
@@ -204,7 +209,7 @@ Resources:
         External:
           - "@aws-sdk/*"
         EntryPoints: 
-          - src/handlers/notification-worker.js
+          - src/handlers/notification-worker.ts
 
   # =========================================================================
   # 6. OBSERVABILITY: DLQ ALARM
@@ -290,7 +295,9 @@ Resources:
   RedriveFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: src/handlers/redrive-handler.handler
+      CodeUri: .
+      Handler: src/handlers/redrive.handler
+      Tracing: Active
       Description: "Manual or automated redrive from DLQ to Main Queue"
       Environment:
         Variables:
@@ -299,6 +306,16 @@ Resources:
       Policies:
         - SQSPollerPolicy: { QueueName: "PaymentNotificationDLQ" }
         - SQSSendMessagePolicy: { QueueName: "PaymentNotificationQueue" }
+
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "node24"
+        External:
+          - "@aws-sdk/*"
+        EntryPoints: 
+          - src/handlers/redrive.ts 
 
 # =========================================================================
 # 9. STACK OUTPUTS: EXPOSING RESOURCES FOR EXTERNAL INTEGRATION

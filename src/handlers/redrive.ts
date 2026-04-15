@@ -1,10 +1,10 @@
 import { SQSClient, ReceiveMessageCommand, SendMessageCommand, DeleteMessageCommand } from "@aws-sdk/client-sqs";
 
 const sqsClient = new SQSClient({});
-const DLQ_URL = process.env.DLQ_URL;
-const MAIN_QUEUE_URL = process.env.MAIN_QUEUE_URL;
+const DLQ_URL = process.env.DLQ_URL!;
+const MAIN_QUEUE_URL = process.env.MAIN_QUEUE_URL!;
 
-export const handler = async (event) => {
+export const handler = async () => {
     console.log("Iniciando Redrive de mensagens da DLQ...");
     let messagesMoved = 0;
 
@@ -27,7 +27,7 @@ export const handler = async (event) => {
 
             await sqsClient.send(new DeleteMessageCommand({
                 QueueUrl: DLQ_URL,
-                ReceiptHandle: msg.ReceiptHandle
+                ReceiptHandle: msg.ReceiptHandle!
             }));
             
             messagesMoved++;

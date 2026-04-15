@@ -1,12 +1,13 @@
+import { SQSHandler } from "aws-lambda";
 import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ddbDocClient } from "../lib/clients.js";
 import { logMetric } from "../common/logger.js";
-import { PaymentSchema } from "../domain/schemas.js";
+import { PaymentData, PaymentSchema } from "../domain/schemas.js";
 
-export const handler = async (event) => {
+export const handler: SQSHandler = async (event) => { 
     console.log(`[NotificationWorker] Received ${event.Records.length} messages from SQS`);
 
-    const batchItemFailures = [];
+    const batchItemFailures: { itemIdentifier: string }[] = [];
 
     for (const record of event.Records) {
         try {
@@ -16,7 +17,8 @@ export const handler = async (event) => {
             const result = PaymentSchema.safeParse(rawData);
 
             if (!result.success) {
-                console.error(`[Poison Pill] ID: ${record.messageId} - Invalid format. Skipping.`);
+                console.error(`[Poison Pill] ID: ${record.messageId} - Invalid format.`);
+                batchItemFailures.push({ itemIdentifier: record.messageId });
                 continue;
             }
 
@@ -35,12 +37,12 @@ export const handler = async (event) => {
                     },
                     ConditionExpression: "attribute_not_exists(PK)"
                 }));
-            } catch (err) {
-                if (err.name === "ConditionalCheckFailedException") {
+            } catch (error: any) {
+                if (error.name === "ConditionalCheckFailedException") {
                     console.log(`[NotificationWorker] Skip: Already sent for ${txId}`);
                     continue;
                 }
-                throw err;
+                throw error;
             }
             
             await simulateNotification(data);
@@ -57,6 +59,6 @@ export const handler = async (event) => {
     return { batchItemFailures };
 };
 
-async function simulateNotification(data) {
+async function simulateNotification(data: PaymentData): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, 50));
 }

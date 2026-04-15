@@ -1,30 +1,32 @@
+import { DynamoDBStreamHandler } from "aws-lambda";
 import { PublishCommand } from "@aws-sdk/client-sns";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
 import { snsClient } from "../lib/clients.js";
 import { logMetric } from "../common/logger.js";
 
-
-export const handler = async (event) => {
+export const handler: DynamoDBStreamHandler = async (event) => {
+    
     const records = event.Records;
     console.log(`Processing ${records.length} records from stream`);
 
-    const batchItemFailures = [];
+    const batchItemFailures: { itemIdentifier: string }[] = [];
 
     const publishPromises = records.map(async (record) => {
 
-        if (record.eventName !== "INSERT") return;
+        if (record.eventName !== "INSERT" || !record.dynamodb?.NewImage) return;
 
         try {
 
-            const transaction = unmarshall(record.dynamodb.NewImage);
+            const transaction = unmarshall(record.dynamodb.NewImage as any);
             
 
             const message = {
                 transactionId: transaction.SK || "N/A",
-                from: transaction.PK || "N/A",
-                to: transaction.to || "UNKNOWN",
+                fromAccount: transaction.PK || "N/A",
+                toAccount: transaction.to || "UNKNOWN",
                 amount: Number(transaction.amount) || 0,
                 timestamp: transaction.timestamp || new Date().toISOString(),
+                idempotencyKey: transaction.SK?.split('#').pop() || "N/A",
                 type: transaction.type || "PAYMENT"
             };
 
@@ -43,7 +45,7 @@ export const handler = async (event) => {
             console.error("Error processing stream record:", error);
             logMetric("StreamProcessingError", 1);
 
-            batchItemFailures.push({ itemIdentifier: record.dynamodb.SequenceNumber });
+            batchItemFailures.push({ itemIdentifier: record.dynamodb?.SequenceNumber || '' });
         }
     });
 
